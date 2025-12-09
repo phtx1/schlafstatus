@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Schlaf-Stoppuhr</title>
   <style>
+    /* === Dein CSS === */
     :root{--bg:#0f1724;--card:#0b1220;--accent:#06b6d4;--muted:#94a3b8;--glass:rgba(255,255,255,0.03)}
     *{box-sizing:border-box}
     html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial}
@@ -22,7 +23,6 @@
     .indicator{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:middle}
     .on{background:#10b981;box-shadow:0 6px 18px rgba(16,185,129,0.12)}
     .off{background:#334155}
-    @media(max-width:420px){.timer{font-size:40px;padding:6px}}
   </style>
 </head>
 <body>
@@ -53,32 +53,31 @@
     <div class="small">Die Seite merkt sich den Laufstatus im Browser (localStorage). Beim Neuladen bleibt die Uhr aktiv.</div>
   </main>
 
+  <!-- ================= Firebase SDK ================= -->
   <script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-analytics.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-analytics.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDD4q23o9Q2XFtqxHasWlVWqzdYO-_9Ols",
-    authDomain: "schlafstatus.firebaseapp.com",
-    databaseURL: "https://schlafstatus-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "schlafstatus",
-    storageBucket: "schlafstatus.firebasestorage.app",
-    messagingSenderId: "934153337996",
-    appId: "1:934153337996:web:87c22a77a6e3b36b268fa9",
-    measurementId: "G-1CBJZJ6XN3"
-  };
+    const firebaseConfig = {
+      apiKey: "AIzaSyDD4q23o9Q2XFtqxHasWlVWqzdYO-_9Ols",
+      authDomain: "schlafstatus.firebaseapp.com",
+      databaseURL: "https://schlafstatus-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "schlafstatus",
+      storageBucket: "schlafstatus.firebasestorage.app",
+      messagingSenderId: "934153337996",
+      appId: "1:934153337996:web:87c22a77a6e3b36b268fa9",
+      measurementId: "G-1CBJZJ6XN3"
+    };
 
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
+    // Firebase initialisieren
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    const db = getDatabase(app);
+  </script>
 
-<script>
-    // Keys in localStorage
-    const KEY_ACTIVE = 'sleep_stopwatch_active';
-    const KEY_START = 'sleep_stopwatch_start';
-    const KEY_ACCUM = 'sleep_stopwatch_accum';
-
+  <!-- ================= Timer / Stoppuhr ================= -->
+  <script>
     const timerEl = document.getElementById('timer');
     const toggleBtn = document.getElementById('toggleBtn');
     const resetBtn = document.getElementById('resetBtn');
@@ -90,53 +89,55 @@
     let rafId = null;
 
     function nowMs(){return Date.now();}
-
     function formatHMS(ms){
-      if(ms < 0) ms = 0;
+      if(ms<0)ms=0;
       const totalSec = Math.floor(ms/1000);
-      const h = Math.floor(totalSec / 3600);
-      const m = Math.floor((totalSec % 3600) / 60);
-      const s = totalSec % 60;
-      return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+      const h = Math.floor(totalSec/3600);
+      const m = Math.floor((totalSec%3600)/60);
+      const s = totalSec%60;
+      return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
     }
+
+    // ===== Load & Save State im localStorage =====
+    const KEY_ACTIVE = 'sleep_stopwatch_active';
+    const KEY_START = 'sleep_stopwatch_start';
+    const KEY_ACCUM = 'sleep_stopwatch_accum';
 
     function loadState(){
       const active = localStorage.getItem(KEY_ACTIVE) === '1';
-      const start = parseInt(localStorage.getItem(KEY_START) || '0',10) || 0;
-      const accum = parseInt(localStorage.getItem(KEY_ACCUM) || '0',10) || 0;
+      const start = parseInt(localStorage.getItem(KEY_START)||'0',10)||0;
+      const accum = parseInt(localStorage.getItem(KEY_ACCUM)||'0',10)||0;
       return {active,start,accum};
     }
 
     function saveState({active,start,accum}){
-      localStorage.setItem(KEY_ACTIVE, active ? '1' : '0');
-      localStorage.setItem(KEY_START, String(start||0));
-      localStorage.setItem(KEY_ACCUM, String(accum||0));
+      localStorage.setItem(KEY_ACTIVE,active?'1':'0');
+      localStorage.setItem(KEY_START,String(start||0));
+      localStorage.setItem(KEY_ACCUM,String(accum||0));
     }
 
     function updateUI(active,start,accum){
       if(active){
         indicator.classList.remove('off'); indicator.classList.add('on');
         statusText.textContent = 'Stoppuhr läuft';
-        sinceText.textContent = 'Gestartet: ' + new Date(start).toLocaleString();
+        sinceText.textContent = 'Gestartet: '+new Date(start).toLocaleString();
         toggleBtn.textContent = 'Aufgewacht — Stop';
         toggleBtn.setAttribute('aria-pressed','true');
-        toggleBtn.classList.remove('btn-start');
-        toggleBtn.classList.add('btn-stop');
+        toggleBtn.classList.remove('btn-start'); toggleBtn.classList.add('btn-stop');
       } else {
         indicator.classList.remove('on'); indicator.classList.add('off');
         statusText.textContent = 'Nicht aktiv';
-        sinceText.textContent = accum ? 'Letzte Session: ' + formatHMS(accum) : '—';
+        sinceText.textContent = accum?'Letzte Session: '+formatHMS(accum):'—';
         toggleBtn.textContent = 'Schlafen — Start';
         toggleBtn.setAttribute('aria-pressed','false');
-        toggleBtn.classList.remove('btn-stop');
-        toggleBtn.classList.add('btn-start');
+        toggleBtn.classList.remove('btn-stop'); toggleBtn.classList.add('btn-start');
       }
-      totalText.textContent = formatHMS(accum + (active ? (nowMs()-start) : 0));
+      totalText.textContent = formatHMS(accum+(active?(nowMs()-start):0));
     }
 
     function tick(){
       const {active,start,accum} = loadState();
-      const elapsed = accum + (active ? (nowMs()-start) : 0);
+      const elapsed = accum + (active?(nowMs()-start):0);
       timerEl.textContent = formatHMS(elapsed);
       totalText.textContent = formatHMS(elapsed);
       rafId = requestAnimationFrame(tick);
@@ -145,43 +146,31 @@
     toggleBtn.addEventListener('click', ()=>{
       let {active,start,accum} = loadState();
       if(!active){
-        // start
-        start = nowMs();
-        active = true;
+        start=nowMs(); active=true;
       } else {
-        // stop -> accumulate
-        const delta = nowMs() - start;
-        accum = (accum || 0) + delta;
-        start = 0;
-        active = false;
+        const delta = nowMs()-start;
+        accum=(accum||0)+delta;
+        start=0; active=false;
       }
       saveState({active,start,accum});
       updateUI(active,start,accum);
+      // TODO: Firebase schreiben, damit Freunde live sehen können
     });
 
     resetBtn.addEventListener('click', ()=>{
-      // Confirm small
-      if(!confirm('Willst du die Stoppuhr wirklich zurücksetzen? Das löscht die bisher aufgezeichnete Dauer.')) return;
+      if(!confirm('Willst du die Stoppuhr wirklich zurücksetzen?')) return;
       saveState({active:false,start:0,accum:0});
       updateUI(false,0,0);
-      timerEl.textContent = '00:00:00';
+      timerEl.textContent='00:00:00';
     });
 
-    // Initialize
     (function(){
-      const state = loadState();
-      // If active but start is missing, fix it by setting active=false
-      if(state.active && !state.start){ state.active = false; state.start = 0; saveState(state); }
+      const state=loadState();
+      if(state.active&&!state.start){state.active=false; state.start=0; saveState(state);}
       updateUI(state.active,state.start,state.accum);
-      // start animation tick
       if(rafId) cancelAnimationFrame(rafId);
       tick();
     })();
-
-    // Make sure state survives when tab becomes hidden/visible
-    document.addEventListener('visibilitychange', ()=>{
-      // Nothing required — timing uses Date.now().
-    });
   </script>
 </body>
 </html>
